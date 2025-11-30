@@ -10,7 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/subconverter
+  REGISTRY_IMAGE: ghcr.io/hyperspectrum-ltd/subconverter-cpp
+
 
 jobs:
   build:
