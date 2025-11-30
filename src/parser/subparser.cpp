@@ -1200,6 +1200,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes)
     std::string type = "none", id, aid = "0", net = "tcp", path, host, edge, tls, sni; //vmess
     std::string plugin, pluginopts, pluginopts_mode, pluginopts_host, pluginopts_mux; //ss
     std::string protocol, protoparam, obfs, obfsparam; //ssr
+    std::string shadowtls_password, shadowtls_version; //shadowtls
     std::string user; //socks
     std::string ip, ipv6, private_key, public_key, mtu; //wireguard
     std::string ports, obfs_protocol, up, up_speed, down, down_speed, auth, auth_str,/* obfs, sni,*/ fingerprint, ca, ca_str, recv_window_conn, recv_window, disable_mtu_discovery, hop_interval, alpn; //hysteria
@@ -1358,6 +1359,15 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes)
                         pluginopts_mux = safe_as<bool>(singleproxy["plugin-opts"]["mux"]) ? "mux=4;" : "";
                     }
                     break;
+                case "shadow-tls"_hash: // 新增 ShadowTLS 支持
+                    plugin = "shadow-tls";
+                    if(singleproxy["plugin-opts"].IsDefined())
+                    {
+                        singleproxy["plugin-opts"]["host"] >>= pluginopts_host; // ShadowTLS host (SNI)
+                        singleproxy["plugin-opts"]["password"] >>= shadowtls_password; // ShadowTLS secret
+                        singleproxy["plugin-opts"]["version"] >>= shadowtls_version; // ShadowTLS version
+                    }
+                    break;
                 default:
                     break;
                 }
@@ -1386,6 +1396,13 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes)
                     pluginopts += "path=" + path + ";";
                 if(!pluginopts_mux.empty())
                     pluginopts += "mux=" + pluginopts_mux + ";";
+                break;
+            case "shadow-tls"_hash: // 构建 ShadowTLS 的参数字符串
+                pluginopts = "host=" + pluginopts_host;
+                if(!shadowtls_password.empty())
+                    pluginopts += ";password=" + shadowtls_password;
+                if(!shadowtls_version.empty())
+                    pluginopts += ";version=" + shadowtls_version;
                 break;
             }
 

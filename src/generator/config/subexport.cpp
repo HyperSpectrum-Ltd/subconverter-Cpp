@@ -311,6 +311,22 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
                 if(!scv.is_undef())
                     singleproxy["plugin-opts"]["skip-cert-verify"] = scv.get();
                 break;
+            case "shadow-tls"_hash: // 新增 ShadowTLS 导出
+                singleproxy["plugin"] = "shadow-tls";
+                {
+                    std::string host = getUrlArg(pluginopts, "host");
+                    std::string pwd = getUrlArg(pluginopts, "password");
+                    std::string ver = getUrlArg(pluginopts, "version");
+                    
+                    if(!host.empty()) singleproxy["plugin-opts"]["host"] = host;
+                    if(!pwd.empty()) singleproxy["plugin-opts"]["password"] = pwd;
+                    if(!ver.empty()) singleproxy["plugin-opts"]["version"] = to_int(ver);
+                    
+                    // ShadowTLS 通常也需要 fingerprint
+                    if(!x.Fingerprint.empty())
+                        singleproxy["client-fingerprint"] = x.Fingerprint;
+                }
+                break;
             }
             break;
         case ProxyType::VMess:
