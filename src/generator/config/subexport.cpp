@@ -128,7 +128,8 @@ bool applyMatcher(const std::string &rule, std::string &real_rule, const Proxy &
         {ProxyType::SOCKS5,       "SOCKS5"},
         {ProxyType::WireGuard,    "WIREGUARD"},
         {ProxyType::Hysteria,     "HYSTERIA"},
-        {ProxyType::Hysteria2,    "HYSTERIA2"}
+        {ProxyType::Hysteria2,    "HYSTERIA2"},
+        {ProxyType::TUIC,         "TUIC"}
     };
     if(startsWith(rule, "!!GROUP="))
     {
@@ -659,6 +660,33 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
             if (x.HopInterval)
                 singleproxy["hop-interval"] = x.HopInterval;
             break;
+        case ProxyType::TUIC:
+            singleproxy["type"] = "tuic";
+            singleproxy["uuid"] = x.UserId;
+            singleproxy["password"] = x.Password;
+            singleproxy["server"] = x.Hostname;
+            singleproxy["port"] = x.Port;
+            
+            if(!x.TuicIp.empty())
+                singleproxy["ip"] = x.TuicIp;
+            if(!x.SNI.empty())
+                singleproxy["sni"] = x.SNI;
+            if(!x.TuicCongestionController.empty())
+                singleproxy["congestion-controller"] = x.TuicCongestionController;
+            if(!x.TuicUDPRelayMode.empty())
+                singleproxy["udp-relay-mode"] = x.TuicUDPRelayMode;
+            if(!x.TuicReduceRTT.is_undef())
+                singleproxy["reduce-rtt"] = x.TuicReduceRTT.get();
+            if(!x.TuicDisableSNI.is_undef())
+                singleproxy["disable-sni"] = x.TuicDisableSNI.get();
+            if(!x.Alpn.empty())
+                singleproxy["alpn"] = x.Alpn;
+            if(!scv.is_undef())
+                singleproxy["skip-cert-verify"] = scv.get();
+            
+            // TUIC 在 Clash Meta 中通常需要 udp: true (基础设置已处理)
+            break;
+
         default:
             continue;
         }
@@ -2412,7 +2440,7 @@ void proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json, std::v
                 
             proxy.AddMember("multiplex", multiplex, allocator);
         }
-        
+
         switch (x.Type)
         {
             case ProxyType::Shadowsocks:
@@ -2618,6 +2646,36 @@ void proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json, std::v
                 }
                 if (!x.CaStr.empty())
                     tls.AddMember("certificate", rapidjson::StringRef(x.CaStr.c_str()), allocator);
+                proxy.AddMember("tls", tls, allocator);
+                break;
+            }
+            case ProxyType::TUIC:
+            {
+                addSingBoxCommonMembers(proxy, x, "tuic", allocator);
+                proxy.AddMember("uuid", rapidjson::StringRef(x.UserId.c_str()), allocator);
+                proxy.AddMember("password", rapidjson::StringRef(x.Password.c_str()), allocator);
+                
+                if (!x.TuicCongestionController.empty())
+                    proxy.AddMember("congestion_control", rapidjson::StringRef(x.TuicCongestionController.c_str()), allocator);
+                if (!x.TuicUDPRelayMode.empty())
+                    proxy.AddMember("udp_relay_mode", rapidjson::StringRef(x.TuicUDPRelayMode.c_str()), allocator);
+                if (!x.TuicReduceRTT.is_undef())
+                    proxy.AddMember("zero_rtt_handshake", x.TuicReduceRTT.get(), allocator);
+                
+                // Sing-box TUIC TLS config
+                rapidjson::Value tls(rapidjson::kObjectType);
+                tls.AddMember("enabled", true, allocator);
+                if (!x.SNI.empty())
+                    tls.AddMember("server_name", rapidjson::StringRef(x.SNI.c_str()), allocator);
+                if (!x.Alpn.empty()) {
+                    rapidjson::Value alpn(rapidjson::kArrayType);
+                    for(const auto& a : x.Alpn)
+                        alpn.PushBack(rapidjson::StringRef(a.c_str()), allocator);
+                    tls.AddMember("alpn", alpn, allocator);
+                }
+                if (!scv.is_undef())
+                    tls.AddMember("insecure", scv.get(), allocator);
+                
                 proxy.AddMember("tls", tls, allocator);
                 break;
             }

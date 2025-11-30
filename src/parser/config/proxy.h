@@ -23,7 +23,8 @@ enum class ProxyType
     SOCKS5,
     WireGuard,
     Hysteria,
-    Hysteria2
+    Hysteria2,
+    TUIC
 };
 
 struct ProxySmux
@@ -63,6 +64,8 @@ inline String getProxyTypeName(ProxyType type)
         return "Hysteria";
     case ProxyType::Hysteria2:
         return "Hysteria2";
+    case ProxyType::TUIC:
+        return "TUIC";
     default:
         return "Unknown";
     }
@@ -149,6 +152,13 @@ struct Proxy
 
     int ShadowTLSVersion = 0;
     ProxySmux Smux;
+
+    // TUIC 字段
+    String TuicCongestionController;
+    String TuicUDPRelayMode;
+    tribool TuicReduceRTT; // Clash Meta: reduce-rtt, Sing-box: zero_rtt_handshake
+    tribool TuicDisableSNI;
+    String TuicIp; // Clash Meta: ip
 };
 
 #define SS_DEFAULT_GROUP "SSProvider"
@@ -161,5 +171,6 @@ struct Proxy
 #define WG_DEFAULT_GROUP "WireGuardProvider"
 #define HYSTERIA_DEFAULT_GROUP "HysteriaProvider"
 #define HYSTERIA2_DEFAULT_GROUP "Hysteria2Provider"
+#define TUIC_DEFAULT_GROUP "TUICProvider"
 
 #endif // PROXY_H_INCLUDED

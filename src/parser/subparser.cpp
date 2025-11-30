@@ -281,6 +281,36 @@ void hysteria2Construct(
     node.HopInterval = to_int(hop_interval);
 }
 
+void tuicConstruct(
+    Proxy &node,
+    const std::string &group,
+    const std::string &remarks,
+    const std::string &server,
+    const std::string &port,
+    const std::string &uuid,
+    const std::string &password,
+    const std::string &ip,
+    const std::string &sni,
+    const std::string &congestion_controller,
+    const std::string &udp_relay_mode,
+    const StringArray &alpn,
+    tribool reduce_rtt,
+    tribool disable_sni,
+    tribool allow_insecure,
+    const std::string &underlying_proxy
+) {
+    commonConstruct(node, ProxyType::TUIC, group, remarks, server, port, tribool(true), tribool(), allow_insecure, tribool(), underlying_proxy);
+    node.UserId = uuid;
+    node.Password = password;
+    node.TuicIp = ip;
+    node.SNI = sni;
+    node.TuicCongestionController = congestion_controller;
+    node.TuicUDPRelayMode = udp_relay_mode;
+    node.Alpn = alpn;
+    node.TuicReduceRTT = reduce_rtt;
+    node.TuicDisableSNI = disable_sni;
+}
+
 void explodeVmess(std::string vmess, Proxy &node)
 {
     std::string version, ps, add, port, type, id, aid, net, path, host, tls, sni;
@@ -1205,6 +1235,10 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes)
     std::string ip, ipv6, private_key, public_key, mtu; //wireguard
     std::string ports, obfs_protocol, up, up_speed, down, down_speed, auth, auth_str,/* obfs, sni,*/ fingerprint, ca, ca_str, recv_window_conn, recv_window, disable_mtu_discovery, hop_interval, alpn; //hysteria
     std::string obfs_password, cwnd; //hysteria2
+    // tuic
+    std::string uuid, congestion_controller, udp_relay_mode; 
+    tribool reduce_rtt, disable_sni; 
+
     string_array dns_server;
     tribool udp, tfo, scv;
     Node singleproxy;
@@ -1225,6 +1259,15 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes)
         tfo = safe_as<std::string>(singleproxy["fast-open"]);
         scv = safe_as<std::string>(singleproxy["skip-cert-verify"]);
         
+        StringArray alpn_list;
+        if(singleproxy["alpn"].IsSequence()) {
+            for(auto x : singleproxy["alpn"]) {
+                alpn_list.push_back(safe_as<std::string>(x));
+            }
+        } else if(singleproxy["alpn"].IsDefined()) {
+            alpn_list.push_back(safe_as<std::string>(singleproxy["alpn"]));
+        }
+
         if(singleproxy["smux"].IsDefined())
         {
             node.Smux.Enabled = safe_as<std::string>(singleproxy["smux"]["enabled"]);
@@ -1568,6 +1611,22 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes)
             hysteria2Construct(node, group, ps, server, port, ports, up, down, password, obfs, obfs_password, sni, fingerprint, ca, ca_str, cwnd, alpn, hop_interval, tfo, scv, underlying_proxy);
             break;
 
+        case "tuic"_hash: // 新增 TUIC 解析
+            group = TUIC_DEFAULT_GROUP;
+            singleproxy["uuid"] >>= uuid;
+            singleproxy["password"] >>= password;
+            singleproxy["ip"] >>= ip;
+            singleproxy["sni"] >>= sni;
+            singleproxy["congestion-controller"] >>= congestion_controller;
+            singleproxy["udp-relay-mode"] >>= udp_relay_mode;
+            reduce_rtt = safe_as<std::string>(singleproxy["reduce-rtt"]);
+            disable_sni = safe_as<std::string>(singleproxy["disable-sni"]);
+            
+            // TUIC 通常默认开启 UDP
+            udp = true;
+
+            tuicConstruct(node, group, ps, server, port, uuid, password, ip, sni, congestion_controller, udp_relay_mode, alpn_list, reduce_rtt, disable_sni, scv, underlying_proxy);
+            break;
         default:
             continue;
         }
@@ -1763,6 +1822,55 @@ void explodeHysteria2(std::string hysteria2, Proxy &node) {
         explodeStdHysteria2(hysteria2, node);
         return;
     }
+}
+
+// 实现 tuic:// 链接解析
+// 格式参考：tuic://uuid:password@host:port?sni=...&congestion_control=...
+void explodeTuic(std::string tuic, Proxy &node) {
+    std::string add, port, uuid, password, sni, congestion_controller, udp_relay_mode, ip, remarks, addition;
+    StringArray alpn_list;
+    tribool scv, reduce_rtt, disable_sni;
+
+    tuic = tuic.substr(7); // remove tuic://
+
+    string_size pos = tuic.rfind("#");
+    if (pos != std::string::npos) {
+        remarks = urlDecode(tuic.substr(pos + 1));
+        tuic.erase(pos);
+    }
+
+    pos = tuic.find("?");
+    if (pos != std::string::npos) {
+        addition = tuic.substr(pos + 1);
+        tuic.erase(pos);
+    }
+
+    // 解析 uuid:password@host:port
+    if (regGetMatch(tuic, R"(^(.*?):(.*?)@(.*)[:](\d+)$)", 4, 0, &uuid, &password, &add, &port))
+    {
+        // match success
+    } 
+    else 
+    {
+        return; // invalid format
+    }
+
+    sni = getUrlArg(addition, "sni");
+    ip = getUrlArg(addition, "ip"); // some clients might use this param
+    congestion_controller = getUrlArg(addition, "congestion_control");
+    udp_relay_mode = getUrlArg(addition, "udp_relay_mode");
+    
+    std::string alpn_str = getUrlArg(addition, "alpn");
+    if (!alpn_str.empty()) alpn_list = split(alpn_str, ",");
+
+    if (getUrlArg(addition, "allow_insecure") == "1") scv = true;
+    if (getUrlArg(addition, "reduce_rtt") == "1") reduce_rtt = true;
+    if (getUrlArg(addition, "disable_sni") == "1") disable_sni = true;
+
+    if (remarks.empty())
+        remarks = add + ":" + port;
+
+    tuicConstruct(node, TUIC_DEFAULT_GROUP, remarks, add, port, uuid, password, ip, sni, congestion_controller, udp_relay_mode, alpn_list, reduce_rtt, disable_sni, scv, "");
 }
 
 // peer = (public-key = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=, allowed-ips = "0.0.0.0/0, ::/0", endpoint = engage.cloudflareclient.com:2408, client-id = 139/184/125),(public-key = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=, endpoint = engage.cloudflareclient.com:2408)
@@ -2664,6 +2772,8 @@ void explode(const std::string &link, Proxy &node)
         explodeTrojan(link, node);
     else if (strFind(link, "hysteria2://") || strFind(link, "hy2://"))
         explodeHysteria2(link, node);
+    else if(startsWith(link, "tuic://")) // 添加
+        explodeTuic(link, node);
     else if(isLink(link))
         explodeHTTPSub(link, node);
 }

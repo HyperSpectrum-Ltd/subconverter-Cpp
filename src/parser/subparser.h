@@ -83,6 +83,25 @@ void hysteria2Construct(
     const std::string &underlying_proxy = ""
 );
 
+void tuicConstruct(
+    Proxy &node,
+    const std::string &group,
+    const std::string &remarks,
+    const std::string &server,
+    const std::string &port,
+    const std::string &uuid,
+    const std::string &password,
+    const std::string &ip,
+    const std::string &sni,
+    const std::string &congestion_controller,
+    const std::string &udp_relay_mode,
+    const StringArray &alpn,
+    tribool reduce_rtt,
+    tribool disable_sni,
+    tribool allow_insecure,
+    const std::string &underlying_proxy = ""
+);
+
 void explodeVmess(std::string vmess, Proxy &node);
 void explodeVless(std::string vless, Proxy &node);
 void explodeSSR(std::string ssr, Proxy &node);
@@ -94,6 +113,7 @@ void explodeStdVless(std::string vless, Proxy &node);
 void explodeShadowrocket(std::string kit, Proxy &node);
 void explodeKitsunebi(std::string kit, Proxy &node);
 void explodeHysteria2(std::string hysteria2, Proxy &node);
+void explodeTuic(std::string tuic, Proxy &node);
 
 /// Parse a link
 void explode(const std::string &link, Proxy &node);
