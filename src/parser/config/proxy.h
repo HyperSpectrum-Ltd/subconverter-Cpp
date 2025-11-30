@@ -26,6 +26,15 @@ enum class ProxyType
     Hysteria2
 };
 
+struct ProxySmux
+{
+    tribool Enabled;
+    String Protocol;
+    int MaxStreams = 0;
+    int MinStreams = 0;
+    tribool Padding;
+};
+
 inline String getProxyTypeName(ProxyType type)
 {
     switch(type)
@@ -137,6 +146,9 @@ struct Proxy
     String RealityPublicKey;// Reality publicKey (可以复用 PublicKey，但为了区分建议明确或注释)
 
     uint32_t CWND = 0;
+
+    int ShadowTLSVersion = 0;
+    ProxySmux Smux;
 };
 
 #define SS_DEFAULT_GROUP "SSProvider"

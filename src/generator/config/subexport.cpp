@@ -282,6 +282,26 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
         singleproxy["port"] = x.Port;
         singleproxy["client-fingerprint"] = x.Fingerprint.empty() ? "chrome" : x.Fingerprint;
 
+        if(!x.Smux.Enabled.is_undef())
+        {
+            YAML::Node smux;
+            smux["enabled"] = x.Smux.Enabled.get();
+            
+            if(!x.Smux.Protocol.empty())
+                smux["protocol"] = x.Smux.Protocol;
+            
+            if(x.Smux.MaxStreams > 0)
+                smux["max-streams"] = x.Smux.MaxStreams;
+                
+            if(x.Smux.MinStreams > 0)
+                smux["min-streams"] = x.Smux.MinStreams;
+                
+            if(!x.Smux.Padding.is_undef())
+                smux["padding"] = x.Smux.Padding.get();
+                
+            singleproxy["smux"] = smux;
+        }
+
         switch(x.Type)
         {
         case ProxyType::Shadowsocks:
@@ -2370,6 +2390,29 @@ void proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json, std::v
         tfo.define(x.TCPFastOpen);
         scv.define(x.AllowInsecure);
         rapidjson::Value proxy(rapidjson::kObjectType);
+
+        if (!x.Smux.Enabled.is_undef() && x.Smux.Enabled.get())
+        {
+            rapidjson::Value multiplex(rapidjson::kObjectType);
+            multiplex.AddMember("enabled", true, allocator);
+            
+            if (!x.Smux.Protocol.empty())
+                multiplex.AddMember("protocol", rapidjson::StringRef(x.Smux.Protocol.c_str()), allocator);
+            else 
+                multiplex.AddMember("protocol", "h2", allocator); // Sing-box 默认通常建议显式指定，h2 或 smux
+                
+            if (x.Smux.MaxStreams > 0)
+                multiplex.AddMember("max_streams", x.Smux.MaxStreams, allocator);
+                
+            if (x.Smux.MinStreams > 0)
+                multiplex.AddMember("min_streams", x.Smux.MinStreams, allocator);
+                
+            if (!x.Smux.Padding.is_undef())
+                multiplex.AddMember("padding", x.Smux.Padding.get(), allocator);
+                
+            proxy.AddMember("multiplex", multiplex, allocator);
+        }
+        
         switch (x.Type)
         {
             case ProxyType::Shadowsocks:

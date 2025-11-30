@@ -1224,6 +1224,24 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes)
         udp = safe_as<std::string>(singleproxy["udp"]);
         tfo = safe_as<std::string>(singleproxy["fast-open"]);
         scv = safe_as<std::string>(singleproxy["skip-cert-verify"]);
+        
+        if(singleproxy["smux"].IsDefined())
+        {
+            node.Smux.Enabled = safe_as<std::string>(singleproxy["smux"]["enabled"]);
+            node.Smux.Protocol = safe_as<std::string>(singleproxy["smux"]["protocol"]);
+            
+            // max-streams
+            if(singleproxy["smux"]["max-streams"].IsDefined())
+                node.Smux.MaxStreams = singleproxy["smux"]["max-streams"].as<int>();
+            
+            // min-streams
+            if(singleproxy["smux"]["min-streams"].IsDefined())
+                node.Smux.MinStreams = singleproxy["smux"]["min-streams"].as<int>();
+            
+            // padding
+            node.Smux.Padding = safe_as<std::string>(singleproxy["smux"]["padding"]);
+        }
+
         switch(hash_(proxytype))
         {
         case "vmess"_hash:
