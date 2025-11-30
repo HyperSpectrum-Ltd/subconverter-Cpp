@@ -15,6 +15,7 @@ enum class ProxyType
     Shadowsocks,
     ShadowsocksR,
     VMess,
+    VLESS,
     Trojan,
     Snell,
     HTTP,
@@ -35,6 +36,8 @@ inline String getProxyTypeName(ProxyType type)
         return "SSR";
     case ProxyType::VMess:
         return "VMess";
+    case ProxyType::VLESS:
+        return "VLESS";
     case ProxyType::Trojan:
         return "Trojan";
     case ProxyType::Snell:
@@ -125,6 +128,13 @@ struct Proxy
     tribool DisableMtuDiscovery;
     uint32_t HopInterval;
     StringArray Alpn;
+
+    // VLESS / XTLS / Reality 相关字段
+    String Flow;            // flow (e.g., xtls-rprx-vision)
+    String PacketEncoding;  // packet encoding
+    String ShortId;         // Reality shortId
+    String SpiderX;         // Reality spiderX
+    String RealityPublicKey;// Reality publicKey (可以复用 PublicKey，但为了区分建议明确或注释)
 
     uint32_t CWND = 0;
 };

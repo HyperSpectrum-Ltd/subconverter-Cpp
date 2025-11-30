@@ -63,6 +63,37 @@ void vmessConstruct(Proxy &node, const std::string &group, const std::string &re
     node.TLSSecure = tls == "tls";
 }
 
+void vlessConstruct(Proxy &node, const std::string &group, const std::string &remarks, const std::string &add, const std::string &port, const std::string &id, const std::string &net, const std::string &cipher, const std::string &path, const std::string &host, const std::string &edge, const std::string &tls, const std::string &sni, const std::string &flow, const std::string &pbk, const std::string &sid, const std::string &spider, tribool udp, tribool tfo, tribool scv, tribool tls13, const std::string& underlying_proxy)
+{
+    commonConstruct(node, ProxyType::VLESS, group, remarks, add, port, udp, tfo, scv, tls13, underlying_proxy);
+    node.UserId = id;
+    node.EncryptMethod = cipher.empty() ? "none" : cipher;
+    node.TransferProtocol = net.empty() ? "tcp" : net;
+    node.Edge = edge;
+    node.ServerName = sni;
+    node.Flow = flow;
+    node.PublicKey = pbk; // Reality Public Key
+    node.ShortId = sid;   // Reality Short ID
+    node.SpiderX = spider; // Reality SpiderX
+
+    if(net == "quic")
+    {
+        node.QUICSecure = host;
+        node.QUICSecret = path;
+    }
+    else
+    {
+        node.Host = (host.empty() && !isIPv4(add) && !isIPv6(add)) ? add.data() : trim(host);
+        if (net == "grpc") {
+            node.Path = trim(path);
+        } else {
+            node.Path = path.empty() ? "/" : trim(path);
+        }
+    }
+    
+    // Reality 逻辑通常包含在 tls 中，如果 security=reality，这里 tls 也是 true
+    node.TLSSecure = (tls == "tls" || tls == "reality");
+}
 void ssrConstruct(Proxy &node, const std::string &group, const std::string &remarks, const std::string &server, const std::string &port, const std::string &protocol, const std::string &method, const std::string &obfs, const std::string &password, const std::string &obfsparam, const std::string &protoparam, tribool udp, tribool tfo, tribool scv,const std::string& underlying_proxy)
 {
     commonConstruct(node, ProxyType::ShadowsocksR, group, remarks, server, port, udp, tfo, scv, tribool(), underlying_proxy);
@@ -466,6 +497,78 @@ void explodeVmessConf(std::string content, std::vector<Proxy> &nodes)
         nodes.emplace_back(std::move(node));
         index++;
     }
+}
+
+void explodeVless(std::string vless, Proxy &node)
+{
+    std::string add, port, id, net, path, host, tls, sni, flow, type, remarks, addition;
+    std::string pbk, sid, spider, fp, enc;
+    vless = vless.substr(8); // remove vless://
+
+    // 提取 remarks (#)
+    string_size pos = vless.rfind('#');
+    if(pos != std::string::npos)
+    {
+        remarks = urlDecode(vless.substr(pos + 1));
+        vless.erase(pos);
+    }
+
+    // 提取 query parameters (?)
+    pos = vless.find('?');
+    if(pos != std::string::npos)
+    {
+        addition = vless.substr(pos + 1);
+        vless.erase(pos);
+    }
+
+    // 解析 user@server:port
+    if(regGetMatch(vless, "(.*?)@(.*):(.*)", 3, 0, &id, &add, &port))
+        return;
+    
+    // 解析 Query 参数
+    net = getUrlArg(addition, "type"); // tcp, ws, grpc, etc.
+    if(net.empty()) net = "tcp";
+    
+    std::string security = getUrlArg(addition, "security");
+    tls = (security == "tls" || security == "reality") ? security : "";
+    
+    enc = getUrlArg(addition, "encryption"); // usually none
+    flow = getUrlArg(addition, "flow");
+    sni = getUrlArg(addition, "sni");
+    fp = getUrlArg(addition, "fp");
+    pbk = getUrlArg(addition, "pbk"); // reality public key
+    sid = getUrlArg(addition, "sid"); // reality short id
+    spider = getUrlArg(addition, "spider"); 
+    
+    // Transport specific
+    if(net == "ws") {
+        host = getUrlArg(addition, "host");
+        path = getUrlArg(addition, "path");
+    } else if(net == "grpc") {
+        path = getUrlArg(addition, "serviceName");
+        if (path.empty()) path = getUrlArg(addition, "service-name"); // 兼容写法
+    } else if(net == "http" || net == "h2") {
+        host = getUrlArg(addition, "host");
+        path = getUrlArg(addition, "path");
+    } else if(net == "kcp") {
+        host = getUrlArg(addition, "headerType");
+        path = getUrlArg(addition, "seed");
+    } else if(net == "tcp") {
+        host = getUrlArg(addition, "headerType"); // http header type
+        if(host == "http") {
+             path = getUrlArg(addition, "path");
+             std::string h = getUrlArg(addition, "host");
+             if(!h.empty()) host = h;
+        } else {
+            host = "";
+        }
+    }
+
+    if(remarks.empty())
+        remarks = add + ":" + port;
+
+    vlessConstruct(node, V2RAY_DEFAULT_GROUP, remarks, add, port, id, net, enc, path, host, "", tls, sni, flow, pbk, sid, spider);
+    if(!fp.empty()) node.Fingerprint = fp;
 }
 
 void explodeSS(std::string ss, Proxy &node)
@@ -1165,6 +1268,67 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes)
             tls = safe_as<std::string>(singleproxy["tls"]) == "true" ? "tls" : "";
 
             vmessConstruct(node, group, ps, server, port, "", id, aid, net, cipher, path, host, edge, tls, sni, udp, tfo, scv, tribool(), underlying_proxy);
+            break;
+        case "vless"_hash:
+            group = V2RAY_DEFAULT_GROUP; // 或者是您自定义的组名
+
+            // 1. 基础字段解析
+            singleproxy["uuid"] >>= id;
+            singleproxy["cipher"] >>= cipher;
+            singleproxy["flow"] >>= up; // 复用 up 变量暂存 flow
+            singleproxy["client-fingerprint"] >>= fingerprint;
+            singleproxy["servername"] >>= sni;
+            
+            // 2. TLS / Reality 解析
+            tls = safe_as<std::string>(singleproxy["tls"]) == "true" ? "tls" : "";
+            if(singleproxy["reality-opts"].IsDefined())
+            {
+                tls = "reality";
+                singleproxy["reality-opts"]["public-key"] >>= public_key;
+                singleproxy["reality-opts"]["short-id"] >>= auth; // 复用 auth 变量暂存 short-id
+                singleproxy["reality-opts"]["spider-x"] >>= auth_str; // 复用 auth_str 变量暂存 spider-x
+            }
+
+            // 3. 关键修复：传输层 (Network) 解析
+            // 必须读取 network 字段，否则会默认为 tcp
+            net = singleproxy["network"].IsDefined() ? safe_as<std::string>(singleproxy["network"]) : "tcp";
+            
+            // 根据 network 类型提取 path/host/service-name
+            switch(hash_(net))
+            {
+            case "http"_hash:
+                singleproxy["http-opts"]["path"][0] >>= path;
+                singleproxy["http-opts"]["headers"]["Host"][0] >>= host;
+                edge.clear();
+                break;
+            case "ws"_hash:
+                if(singleproxy["ws-opts"].IsDefined()) {
+                    path = singleproxy["ws-opts"]["path"].IsDefined() ? safe_as<std::string>(singleproxy["ws-opts"]["path"]) : "/";
+                    singleproxy["ws-opts"]["headers"]["Host"] >>= host;
+                    singleproxy["ws-opts"]["headers"]["Edge"] >>= edge;
+                } else if (singleproxy["ws-path"].IsDefined()) { // 兼容旧格式
+                     path = safe_as<std::string>(singleproxy["ws-path"]);
+                     singleproxy["ws-headers"]["Host"] >>= host;
+                }
+                break;
+            case "h2"_hash:
+                singleproxy["h2-opts"]["path"] >>= path;
+                singleproxy["h2-opts"]["host"][0] >>= host;
+                edge.clear();
+                break;
+            case "grpc"_hash:
+                singleproxy["grpc-opts"]["grpc-service-name"] >>= path;
+                // gRPC 模式下，host 通常由 servername (sni) 承担，或者在 grpc-opts 中不常用
+                edge.clear();
+                break;
+            }
+
+            // 4. 构造节点
+            // 注意参数顺序：flow(up), public_key, short_id(auth), spider_x(auth_str)
+            vlessConstruct(node, group, ps, server, port, id, net, cipher, path, host, edge, tls, sni, up, public_key, auth, auth_str, udp, tfo, scv, tribool(), underlying_proxy);
+            
+            if(!fingerprint.empty()) 
+                node.Fingerprint = fingerprint;
             break;
         case "ss"_hash:
             group = SS_DEFAULT_GROUP;
@@ -2451,6 +2615,8 @@ void explode(const std::string &link, Proxy &node)
         explodeSSR(link, node);
     else if(startsWith(link, "vmess://") || startsWith(link, "vmess1://"))
         explodeVmess(link, node);
+    else if(startsWith(link, "vless://"))
+        explodeVless(link, node);
     else if(startsWith(link, "ss://"))
         explodeSS(link, node);
     else if(startsWith(link, "socks://") || startsWith(link, "https://t.me/socks") || startsWith(link, "tg://socks"))
