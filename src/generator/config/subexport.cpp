@@ -129,7 +129,8 @@ bool applyMatcher(const std::string &rule, std::string &real_rule, const Proxy &
         {ProxyType::WireGuard,    "WIREGUARD"},
         {ProxyType::Hysteria,     "HYSTERIA"},
         {ProxyType::Hysteria2,    "HYSTERIA2"},
-        {ProxyType::TUIC,         "TUIC"}
+        {ProxyType::TUIC,         "TUIC"},
+        {ProxyType::Mieru,        "MIERU"}
     };
     if(startsWith(rule, "!!GROUP="))
     {
@@ -344,6 +345,23 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
                     if(!ver.empty()) singleproxy["plugin-opts"]["version"] = to_int(ver);
                     
                     // ShadowTLS 通常也需要 fingerprint
+                    if(!x.Fingerprint.empty())
+                        singleproxy["client-fingerprint"] = x.Fingerprint;
+                }
+                break;
+            case "restls"_hash: // Restls 导出
+                singleproxy["plugin"] = "restls";
+                {
+                    std::string host = getUrlArg(pluginopts, "host");
+                    std::string pwd = getUrlArg(pluginopts, "password");
+                    std::string hint = getUrlArg(pluginopts, "version-hint");
+                    std::string script = getUrlArg(pluginopts, "restls-script");
+                    
+                    if(!host.empty()) singleproxy["plugin-opts"]["host"] = host;
+                    if(!pwd.empty()) singleproxy["plugin-opts"]["password"] = pwd;
+                    if(!hint.empty()) singleproxy["plugin-opts"]["version-hint"] = hint;
+                    if(!script.empty()) singleproxy["plugin-opts"]["restls-script"] = script;
+                    
                     if(!x.Fingerprint.empty())
                         singleproxy["client-fingerprint"] = x.Fingerprint;
                 }
@@ -685,6 +703,17 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
                 singleproxy["skip-cert-verify"] = scv.get();
             
             // TUIC 在 Clash Meta 中通常需要 udp: true (基础设置已处理)
+            break;
+        case ProxyType::Mieru: // Mieru 导出
+            singleproxy["type"] = "mieru";
+            singleproxy["username"] = x.Username;
+            singleproxy["password"] = x.Password;
+            if(!x.Ports.empty()) // Ports 存储了 port-range
+                singleproxy["port-range"] = x.Ports;
+            if(!x.TransferProtocol.empty())
+                singleproxy["transport"] = x.TransferProtocol;
+            if(!x.ProtocolParam.empty()) // ProtocolParam 存储了 multiplex
+                singleproxy["multiplex"] = x.ProtocolParam;
             break;
 
         default:
@@ -2677,6 +2706,25 @@ void proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json, std::v
                     tls.AddMember("insecure", scv.get(), allocator);
                 
                 proxy.AddMember("tls", tls, allocator);
+                break;
+            }
+            case ProxyType::Mieru: // Mieru 导出 (Sing-box)
+            {
+                addSingBoxCommonMembers(proxy, x, "mieru", allocator);
+                // Sing-box Mieru uses users list
+                rapidjson::Value users(rapidjson::kArrayType);
+                rapidjson::Value user(rapidjson::kObjectType);
+                user.AddMember("name", rapidjson::StringRef(x.Username.c_str()), allocator);
+                user.AddMember("password", rapidjson::StringRef(x.Password.c_str()), allocator);
+                users.PushBack(user, allocator);
+                proxy.AddMember("users", users, allocator);
+                
+                if(!x.Ports.empty()) // port_range
+                    proxy.AddMember("port_range", rapidjson::StringRef(x.Ports.c_str()), allocator);
+                if(!x.TransferProtocol.empty())
+                    proxy.AddMember("transport", rapidjson::StringRef(x.TransferProtocol.c_str()), allocator);
+                if(!x.ProtocolParam.empty())
+                    proxy.AddMember("multiplex", rapidjson::StringRef(x.ProtocolParam.c_str()), allocator);
                 break;
             }
             case ProxyType::HTTP:

@@ -311,6 +311,30 @@ void tuicConstruct(
     node.TuicDisableSNI = disable_sni;
 }
 
+void mieruConstruct(
+    Proxy &node,
+    const std::string &group,
+    const std::string &remarks,
+    const std::string &server,
+    const std::string &port,
+    const std::string &username,
+    const std::string &password,
+    const std::string &ports,
+    const std::string &transport,
+    const std::string &multiplex,
+    tribool allow_insecure,
+    const std::string &underlying_proxy
+) {
+    commonConstruct(node, ProxyType::Mieru, group, remarks, server, port, tribool(true), tribool(), allow_insecure, tribool(), underlying_proxy);
+    node.Username = username;
+    node.Password = password;
+    node.Ports = ports; // Port range
+    node.TransferProtocol = transport;
+    node.Mtu = to_int(multiplex); // 借用 Mtu 存 multiplex? 或者 ProtocolParam
+    // 实际上 multiplex 是协议层面的，这里简单存储
+    node.ProtocolParam = multiplex; 
+}
+
 void explodeVmess(std::string vmess, Proxy &node)
 {
     std::string version, ps, add, port, type, id, aid, net, path, host, tls, sni;
@@ -1231,6 +1255,7 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes)
     std::string plugin, pluginopts, pluginopts_mode, pluginopts_host, pluginopts_mux; //ss
     std::string protocol, protoparam, obfs, obfsparam; //ssr
     std::string shadowtls_password, shadowtls_version; //shadowtls
+    std::string restls_password, restls_version_hint, restls_script; //restls
     std::string user; //socks
     std::string ip, ipv6, private_key, public_key, mtu; //wireguard
     std::string ports, obfs_protocol, up, up_speed, down, down_speed, auth, auth_str,/* obfs, sni,*/ fingerprint, ca, ca_str, recv_window_conn, recv_window, disable_mtu_discovery, hop_interval, alpn; //hysteria
@@ -1238,6 +1263,8 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes)
     // tuic
     std::string uuid, congestion_controller, udp_relay_mode; 
     tribool reduce_rtt, disable_sni; 
+
+    std::string mieru_username, mieru_transport, mieru_multiplex; // mieru
 
     string_array dns_server;
     tribool udp, tfo, scv;
@@ -1429,6 +1456,15 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes)
                         singleproxy["plugin-opts"]["version"] >>= shadowtls_version; // ShadowTLS version
                     }
                     break;
+                case "restls"_hash: // 新增 Restls 支持
+                    plugin = "restls";
+                    if(singleproxy["plugin-opts"].IsDefined()) {
+                        singleproxy["plugin-opts"]["host"] >>= pluginopts_host;
+                        singleproxy["plugin-opts"]["password"] >>= restls_password;
+                        singleproxy["plugin-opts"]["version-hint"] >>= restls_version_hint;
+                        singleproxy["plugin-opts"]["restls-script"] >>= restls_script;
+                    }
+                    break;
                 default:
                     break;
                 }
@@ -1464,6 +1500,12 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes)
                     pluginopts += ";password=" + shadowtls_password;
                 if(!shadowtls_version.empty())
                     pluginopts += ";version=" + shadowtls_version;
+                break;
+            case "restls"_hash: // 构建 Restls opts
+                pluginopts = "host=" + pluginopts_host;
+                if(!restls_password.empty()) pluginopts += ";password=" + restls_password;
+                if(!restls_version_hint.empty()) pluginopts += ";version-hint=" + restls_version_hint;
+                if(!restls_script.empty()) pluginopts += ";restls-script=" + restls_script;
                 break;
             }
 
@@ -1627,6 +1669,18 @@ void explodeClash(Node yamlnode, std::vector<Proxy> &nodes)
 
             tuicConstruct(node, group, ps, server, port, uuid, password, ip, sni, congestion_controller, udp_relay_mode, alpn_list, reduce_rtt, disable_sni, scv, underlying_proxy);
             break;
+
+        case "mieru"_hash: // 新增 Mieru 解析
+            group = MIERU_DEFAULT_GROUP;
+            singleproxy["username"] >>= mieru_username;
+            singleproxy["password"] >>= password;
+            singleproxy["port-range"] >>= ports; // reuse ports variable for range
+            singleproxy["transport"] >>= mieru_transport;
+            singleproxy["multiplex"] >>= mieru_multiplex;
+            
+            mieruConstruct(node, group, ps, server, port, mieru_username, password, ports, mieru_transport, mieru_multiplex, scv, underlying_proxy);
+            break;
+
         default:
             continue;
         }
@@ -1871,6 +1925,41 @@ void explodeTuic(std::string tuic, Proxy &node) {
         remarks = add + ":" + port;
 
     tuicConstruct(node, TUIC_DEFAULT_GROUP, remarks, add, port, uuid, password, ip, sni, congestion_controller, udp_relay_mode, alpn_list, reduce_rtt, disable_sni, scv, "");
+}
+
+void explodeMieru(std::string mieru, Proxy &node) {
+    // 示例格式: mieru://username:password@host:port?transport=...
+    std::string add, port, username, password, transport, multiplex, remarks, addition;
+    tribool scv;
+
+    mieru = mieru.substr(8); // remove mieru://
+
+    string_size pos = mieru.rfind("#");
+    if (pos != std::string::npos) {
+        remarks = urlDecode(mieru.substr(pos + 1));
+        mieru.erase(pos);
+    }
+
+    pos = mieru.find("?");
+    if (pos != std::string::npos) {
+        addition = mieru.substr(pos + 1);
+        mieru.erase(pos);
+    }
+
+    if (regGetMatch(mieru, R"(^(.*?):(.*?)@(.*)[:](\d+)$)", 4, 0, &username, &password, &add, &port))
+    {
+    } else {
+        return;
+    }
+
+    transport = getUrlArg(addition, "transport");
+    multiplex = getUrlArg(addition, "multiplex");
+    if (getUrlArg(addition, "allow_insecure") == "1") scv = true;
+
+    if (remarks.empty())
+        remarks = add + ":" + port;
+
+    mieruConstruct(node, MIERU_DEFAULT_GROUP, remarks, add, port, username, password, "", transport, multiplex, scv, "");
 }
 
 // peer = (public-key = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=, allowed-ips = "0.0.0.0/0, ::/0", endpoint = engage.cloudflareclient.com:2408, client-id = 139/184/125),(public-key = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=, endpoint = engage.cloudflareclient.com:2408)
@@ -2772,8 +2861,10 @@ void explode(const std::string &link, Proxy &node)
         explodeTrojan(link, node);
     else if (strFind(link, "hysteria2://") || strFind(link, "hy2://"))
         explodeHysteria2(link, node);
-    else if(startsWith(link, "tuic://")) // 添加
+    else if(startsWith(link, "tuic://"))
         explodeTuic(link, node);
+    else if(startsWith(link, "mieru://"))
+        explodeMieru(link, node);
     else if(isLink(link))
         explodeHTTPSub(link, node);
 }

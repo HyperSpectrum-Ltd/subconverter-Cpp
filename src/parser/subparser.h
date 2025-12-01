@@ -102,6 +102,21 @@ void tuicConstruct(
     const std::string &underlying_proxy = ""
 );
 
+void mieruConstruct(
+    Proxy &node,
+    const std::string &group,
+    const std::string &remarks,
+    const std::string &server,
+    const std::string &port,
+    const std::string &username,
+    const std::string &password,
+    const std::string &ports, // 端口范围
+    const std::string &transport,
+    const std::string &multiplex, // Mieru multiplex setting
+    tribool allow_insecure,
+    const std::string &underlying_proxy = ""
+);
+
 void explodeVmess(std::string vmess, Proxy &node);
 void explodeVless(std::string vless, Proxy &node);
 void explodeSSR(std::string ssr, Proxy &node);
@@ -114,6 +129,7 @@ void explodeShadowrocket(std::string kit, Proxy &node);
 void explodeKitsunebi(std::string kit, Proxy &node);
 void explodeHysteria2(std::string hysteria2, Proxy &node);
 void explodeTuic(std::string tuic, Proxy &node);
+void explodeMieru(std::string mieru, Proxy &node);
 
 /// Parse a link
 void explode(const std::string &link, Proxy &node);
