@@ -33,11 +33,13 @@ RUN set -xe && \
     git clone https://github.com/ToruNiina/toml11 --branch="v4.3.0" --depth=1 && \
     cd toml11 && \
     cmake -DCMAKE_CXX_STANDARD=11 . && \
-    make install -j $THREADS && \
-    cd .. && \
-    git clone https://github.com/tindy2013/subconverter --depth=1 && \
-    cd subconverter && \
-    [ -n "$SHA" ] && sed -i 's/\(v[0-9]\.[0-9]\.[0-9]\)/\1-'"$SHA"'/' src/version.h;\
+    make install -j $THREADS
+
+# 新增部分：复制当前上下文（即源码）到镜像中
+COPY . /subconverter
+WORKDIR /subconverter
+
+RUN [ -n "$SHA" ] && sed -i 's/\(v[0-9]\.[0-9]\.[0-9]\)/\1-'"$SHA"'/' src/version.h; \
     python3 -m ensurepip && \
     python3 -m pip install gitpython && \
     python3 scripts/update_rules.py -c scripts/rules_config.conf && \
