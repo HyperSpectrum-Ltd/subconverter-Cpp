@@ -8,6 +8,7 @@
 #include "proxygroup.h"
 #include "regmatch.h"
 #include "ruleset.h"
+#include "utils/logger.h"
 
 namespace toml
 {
@@ -237,6 +238,14 @@ namespace INIBinding
                     continue;
                 }
 
+                unsigned int start_i = 2;
+                if(conf.Type == ProxyGroupType::LoadBalance && vArray.size() >= 4 && (vArray[2] == "round-robin" || vArray[2] == "consistent-hashing"))
+                {
+                    if(vArray[2] == "round-robin")
+                        conf.Strategy = BalanceStrategy::RoundRobin;
+                    start_i = 3;
+                }
+
                 if(conf.Type == ProxyGroupType::URLTest || conf.Type == ProxyGroupType::LoadBalance || conf.Type == ProxyGroupType::Fallback)
                 {
                     if(rules_upper_bound < 5)
@@ -246,7 +255,7 @@ namespace INIBinding
                     parseGroupTimes(vArray[rules_upper_bound + 1], &conf.Interval, &conf.Timeout, &conf.Tolerance);
                 }
 
-                for(unsigned int i = 2; i < rules_upper_bound; i++)
+                for(unsigned int i = start_i; i < rules_upper_bound; i++)
                 {
                     if(startsWith(vArray[i], "!!PROVIDER="))
                     {
