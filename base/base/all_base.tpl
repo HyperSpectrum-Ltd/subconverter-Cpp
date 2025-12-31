@@ -1,16 +1,150 @@
-{% if request.target == "clash" or request.target == "clashr" %}
+{% if request.target == "clash" or request.target == "clashr" or request.target == "clash.meta" %}
 
-port: {{ default(global.clash.http_port, "7890") }}
-socks-port: {{ default(global.clash.socks_port, "7891") }}
+mixed-port: {{ default(global.clash.mixed-port, "7890") }}
+#port: {{ default(global.clash.http_port, "7890") }}
+#socks-port: {{ default(global.clash.socks_port, "7891") }}
 allow-lan: {{ default(global.clash.allow_lan, "true") }}
 mode: Rule
+ipv6: true
+
+#geodata-mode: true
+#geox-url:
+#  geoip: "https://mirror.ghproxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat"
+#  geosite: "https://mirror.ghproxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+#  mmdb: "https://mirror.ghproxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb"
+
+{% if default(request.mobile, "") == "1" %}
+log-level: silent
+{% else %}
 log-level: {{ default(global.clash.log_level, "info") }}
-external-controller: {{ default(global.clash.external_controller, "127.0.0.1:9090") }}
-{% if default(request.clash.dns, "") == "1" %}
-dns:
-  enable: true
-  listen: :1053
 {% endif %}
+external-controller: :9090
+{% if default(request.mobile, "") == "1" %}
+keep-alive-interval: 240
+{% endif %}
+dns:
+  {% if default(request.dns, "") == "1" %}
+  enable: true
+  {% else %}
+  enable: false
+  {% endif %}
+  listen: 0.0.0.0:1053
+  ipv6: true
+  prefer-h3: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-persistence: true
+  store-fake-ip: true
+
+  fake-ip-filter:
+    - geosite:private         # 排除私有网络
+    - geosite:category-ntp    # 排除时间同步
+    
+  # ==========================================
+  # 境外 DNS 池 (nameserver) - 走代理
+  # ==========================================
+  nameserver:
+    # 1. Cloudflare (速度快，CDN 友好)
+    - 'https://1.1.1.1/dns-query#h3=true'
+    
+    # 2. Google (全球标准，备用首选)
+    - 'https://8.8.8.8/dns-query#h3=true'
+    
+    # 3. Quad9 (隐私保护，推荐加入)
+    - 'https://9.9.9.9/dns-query#h3=true'
+    
+    # 4. OpenDNS (思科大厂，极端稳定)
+    - 'https://208.67.222.222/dns-query#h3=true'
+
+  # ==========================================
+  # 国内 DNS 池 (policy) - 直连
+  # ==========================================
+  nameserver-policy:
+    "geosite:cn,private,apple,steam@cn":
+      # 阿里 (通常最快)
+      - 'https://223.5.5.5/dns-query'
+      # 腾讯 (备用)
+      - 'https://1.12.12.12/dns-query'
+      # 360 (电信/联通线路有时候有奇效)
+      - 'https://doh.360.cn/dns-query'
+
+  # Bootstrap (用于启动连接的纯 IP DNS)
+  proxy-server-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+    - 180.76.76.76
+sniffer:
+  {% if default(request.sniffer, "") == "1" %}
+  enable: true
+  {% else %}
+  enable: false
+  {% endif %}
+  # [优化1] 强制覆盖目标地址，确保分流精确
+  force-dns-mapping: true 
+  parse-pure-ip: true     # 对纯 IP 流量尝试反查域名 (Meta 特性)
+  override-destination: true
+  
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+      override-destination: true
+    # [优化2] 增加 QUIC (HTTP/3) 嗅探，防止 Google/YouTube 流量漏网
+    QUIC:
+      ports: [443, 8443]
+      override-destination: true
+
+  # [优化3] 完善的排除列表，防止智能家居、游戏、P2P 炸毛
+  skip-domain:
+    - "Mijia Cloud"
+    - "+.push.apple.com"      # 苹果推送
+    - "+.apple.com"           # 苹果服务（部分）
+    - "+.ijinshan.com"        # 金山系
+    - "+.weixin.com"          # 微信
+    - "dlg.io.mi.com"         # 米家设备日志
+    - "+.music.163.com"       # 网易云音乐
+    - "+.baidu.com"           # 百度系（防止误嗅探导致直连变慢）
+tun:
+  {% if default(request.tun, "") == "1" %}
+  enable: true
+  {% else %}
+  enable: false
+  {% endif %}
+  
+  # [优化1] 智能选择协议栈 (Stack)
+  # 手机端(Mobile)保持 gvisor 以保证兼容性
+  # 电脑端(PC)使用 mixed 或 system 以获得极致性能
+  {% if default(request.mobile, "") == "1" %}
+  stack: gvisor
+  {% else %}
+  stack: mixed  # PC端建议使用 mixed (Meta内核专属高性能模式)
+  {% endif %}
+
+  # [优化2] DNS 劫持范围扩大，确保不漏网
+  dns-hijack:
+    - "any:53"
+    - "tcp://any:53"
+
+  # [优化3] 自动路由与接口
+  auto-route: true
+  auto-detect-interface: true
+  
+  # [优化4] 开启“独立端点 NAT”，这对游戏和 P2P 下载至关重要
+  endpoint-independent-nat: true
+  
+  # [优化5] 调整 MTU，避免分包导致的速度损失 (通常 9000 或 1500，保守设 9000 由系统自适应)
+  mtu: 9000
+profile:
+  # 存储你手动选择的节点，重启不丢失
+  store-selected: true
+  
+  # 存储 Fake-IP 映射表，重启后微信/网页能秒开，不需要重新解析 DNS
+  store-fake-ip: true
+  
+  # [优化] 必须关闭！除非你在调试内核故障
+  tracing: false
 {% if local.clash.new_field_name == "true" %}
 proxies: ~
 proxy-groups: ~
