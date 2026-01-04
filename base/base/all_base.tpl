@@ -18,7 +18,8 @@ log-level: silent
 {% else %}
 log-level: {{ default(global.clash.log_level, "info") }}
 {% endif %}
-external-controller: :9090
+external-controller: 127.0.0.1:9090
+secret: CHANGE_A_STRONG_PASSWORD
 {% if default(request.mobile, "") == "1" %}
 keep-alive-interval: 240
 {% endif %}
@@ -39,6 +40,7 @@ dns:
   fake-ip-filter:
     - geosite:private         # 排除私有网络
     - geosite:category-ntp    # 排除时间同步
+    - geosite:cn
     
   # ==========================================
   # 境外 DNS 池 (nameserver) - 走代理
@@ -46,9 +48,11 @@ dns:
   nameserver:
     # 1. Cloudflare (速度快，CDN 友好)
     - 'https://1.1.1.1/dns-query#h3=true'
-    
+    - 'https://1.1.1.1/dns-query'
+
     # 2. Google (全球标准，备用首选)
     - 'https://8.8.8.8/dns-query#h3=true'
+    - 'https://8.8.8.8/dns-query'
     
     # 3. Quad9 (隐私保护，推荐加入)
     - 'https://9.9.9.9/dns-query#h3=true'
@@ -135,7 +139,7 @@ tun:
   endpoint-independent-nat: true
   
   # [优化5] 调整 MTU，避免分包导致的速度损失 (通常 9000 或 1500，保守设 9000 由系统自适应)
-  mtu: 9000
+  mtu: 1480
 profile:
   # 存储你手动选择的节点，重启不丢失
   store-selected: true
