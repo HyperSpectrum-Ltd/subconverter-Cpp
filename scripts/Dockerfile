@@ -47,15 +47,14 @@ RUN [ -n "$SHA" ] && sed -i 's/\(v[0-9]\.[0-9]\.[0-9]\)/\1-'"$SHA"'/' src/versio
 FROM alpine:3.16
 LABEL maintainer="tindy.it@gmail.com"
 
-RUN apk add --no-cache --virtual subconverter-deps pcre2 libcurl yaml-cpp python3 git && \
-    python3 -m ensurepip && \
-    python3 -m pip install gitpython
+RUN apk add --no-cache --virtual subconverter-deps pcre2 libcurl yaml-cpp python3 git
 
 COPY --from=builder /subconverter/subconverter /usr/bin/
 COPY --from=builder /subconverter/scripts /subconverter/scripts
 COPY base /base/
 
-RUN cd /base && python3 /subconverter/scripts/update_rules.py -c /subconverter/scripts/rules_config.conf
+RUN apt-get update && apt-get install -y python3-pip git && \
+    cd /base && python3 /subconverter/scripts/update_rules.py -c /subconverter/scripts/rules_config.conf
 
 ENV TZ=Africa/Abidjan
 RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime
