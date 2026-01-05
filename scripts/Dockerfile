@@ -35,8 +35,8 @@ RUN set -xe && \
     cmake -DCMAKE_CXX_STANDARD=11 . && \
     make install -j $THREADS
 
-# 新增部分：复制源码文件（排除base/）到镜像中
-COPY CMakeLists.txt src/ include/ scripts/ cmake/ /subconverter/
+# 新增部分：复制当前上下文（即源码）到镜像中
+COPY . /subconverter
 WORKDIR /subconverter
 
 RUN [ -n "$SHA" ] && sed -i 's/\(v[0-9]\.[0-9]\.[0-9]\)/\1-'"$SHA"'/' src/version.h; \
