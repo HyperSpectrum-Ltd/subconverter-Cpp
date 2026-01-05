@@ -54,6 +54,7 @@ COPY --from=builder /subconverter/scripts /subconverter/scripts
 COPY base /base/
 
 RUN apk update && apk add --no-cache python3 py3-pip git && \
+    pip install GitPython && \
     cd /base && python3 /subconverter/scripts/update_rules.py -c /subconverter/scripts/rules_config.conf
 
 ENV TZ=Africa/Abidjan
