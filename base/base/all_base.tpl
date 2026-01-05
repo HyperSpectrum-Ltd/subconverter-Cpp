@@ -14,7 +14,7 @@ ipv6: true
 #  mmdb: "https://mirror.ghproxy.com/https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb"
 
 {% if default(request.mobile, "") == "1" %}
-log-level: silent
+log-level: warning
 {% else %}
 log-level: {{ default(global.clash.log_level, "info") }}
 {% endif %}
@@ -29,9 +29,9 @@ dns:
   {% else %}
   enable: false
   {% endif %}
-  listen: 0.0.0.0:1053
+  listen: 127.0.0.1:1053
   ipv6: true
-  prefer-h3: true
+  prefer-h3: false
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   fake-ip-persistence: true
@@ -40,25 +40,22 @@ dns:
   fake-ip-filter:
     - geosite:private         # 排除私有网络
     - geosite:category-ntp    # 排除时间同步
-    - geosite:cn
     
   # ==========================================
   # 境外 DNS 池 (nameserver) - 走代理
   # ==========================================
   nameserver:
     # 1. Cloudflare (速度快，CDN 友好)
-    - 'https://1.1.1.1/dns-query#h3=true'
     - 'https://1.1.1.1/dns-query'
 
     # 2. Google (全球标准，备用首选)
-    - 'https://8.8.8.8/dns-query#h3=true'
     - 'https://8.8.8.8/dns-query'
     
     # 3. Quad9 (隐私保护，推荐加入)
-    - 'https://9.9.9.9/dns-query#h3=true'
+    - 'https://9.9.9.9/dns-query'
     
     # 4. OpenDNS (思科大厂，极端稳定)
-    - 'https://208.67.222.222/dns-query#h3=true'
+    - 'https://208.67.222.222/dns-query'
 
   # ==========================================
   # 国内 DNS 池 (policy) - 直连
@@ -86,19 +83,13 @@ sniffer:
   # [优化1] 强制覆盖目标地址，确保分流精确
   force-dns-mapping: true 
   parse-pure-ip: true     # 对纯 IP 流量尝试反查域名 (Meta 特性)
-  override-destination: true
+  override-destination: false
   
   sniff:
     HTTP:
       ports: [80, 8080-8880]
-      override-destination: true
     TLS:
       ports: [443, 8443]
-      override-destination: true
-    # [优化2] 增加 QUIC (HTTP/3) 嗅探，防止 Google/YouTube 流量漏网
-    QUIC:
-      ports: [443, 8443]
-      override-destination: true
 
   # [优化3] 完善的排除列表，防止智能家居、游戏、P2P 炸毛
   skip-domain:
@@ -139,7 +130,7 @@ tun:
   endpoint-independent-nat: true
   
   # [优化5] 调整 MTU，避免分包导致的速度损失 (通常 9000 或 1500，保守设 9000 由系统自适应)
-  mtu: 1480
+  mtu: 1400
 profile:
   # 存储你手动选择的节点，重启不丢失
   store-selected: true
