@@ -52,6 +52,7 @@ RUN apk add --no-cache --virtual subconverter-deps pcre2 libcurl yaml-cpp python
     python3 -m pip install gitpython
 
 COPY --from=builder /subconverter/subconverter /usr/bin/
+COPY --from=builder /subconverter/scripts /subconverter/scripts
 COPY base /base/
 
 RUN cd /base && python3 /subconverter/scripts/update_rules.py -c /subconverter/scripts/rules_config.conf
