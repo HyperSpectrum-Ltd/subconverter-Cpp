@@ -53,7 +53,7 @@ COPY --from=builder /subconverter/subconverter /usr/bin/
 COPY --from=builder /subconverter/scripts /subconverter/scripts
 COPY base /base/
 
-RUN apt-get update && apt-get install -y python3-pip git && \
+RUN apk update && apk add --no-cache python3 py3-pip git && \
     cd /base && python3 /subconverter/scripts/update_rules.py -c /subconverter/scripts/rules_config.conf
 
 ENV TZ=Africa/Abidjan
