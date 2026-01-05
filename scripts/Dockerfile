@@ -35,14 +35,11 @@ RUN set -xe && \
     cmake -DCMAKE_CXX_STANDARD=11 . && \
     make install -j $THREADS
 
-# 新增部分：复制当前上下文（即源码）到镜像中
-COPY . /subconverter
+# 新增部分：复制源码文件（排除base/）到镜像中
+COPY CMakeLists.txt src/ include/ scripts/ cmake/ /subconverter/
 WORKDIR /subconverter
 
 RUN [ -n "$SHA" ] && sed -i 's/\(v[0-9]\.[0-9]\.[0-9]\)/\1-'"$SHA"'/' src/version.h; \
-    python3 -m ensurepip && \
-    python3 -m pip install gitpython && \
-    python3 scripts/update_rules.py -c scripts/rules_config.conf && \
     cmake -DCMAKE_BUILD_TYPE=Release . && \
     make -j $THREADS
 
@@ -50,10 +47,14 @@ RUN [ -n "$SHA" ] && sed -i 's/\(v[0-9]\.[0-9]\.[0-9]\)/\1-'"$SHA"'/' src/versio
 FROM alpine:3.16
 LABEL maintainer="tindy.it@gmail.com"
 
-RUN apk add --no-cache --virtual subconverter-deps pcre2 libcurl yaml-cpp
+RUN apk add --no-cache --virtual subconverter-deps pcre2 libcurl yaml-cpp python3 git && \
+    python3 -m ensurepip && \
+    python3 -m pip install gitpython
 
 COPY --from=builder /subconverter/subconverter /usr/bin/
-COPY --from=builder /subconverter/base /base/
+COPY base /base/
+
+RUN cd /base && python3 /subconverter/scripts/update_rules.py -c /subconverter/scripts/rules_config.conf
 
 ENV TZ=Africa/Abidjan
 RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime

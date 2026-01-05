@@ -44,9 +44,11 @@ cmake -DCMAKE_INSTALL_PREFIX="$MINGW_PREFIX" -G "Unix Makefiles" -DCMAKE_CXX_STA
 make install -j4
 cd ..
 
-python -m ensurepip
-python -m pip install gitpython
-python scripts/update_rules.py -c scripts/rules_config.conf
+if [ "$SKIP_UPDATE" != "1" ]; then
+  python -m ensurepip
+  python -m pip install gitpython
+  python scripts/update_rules.py -c scripts/rules_config.conf
+fi
 
 rm -f C:/Strawberry/perl/bin/pkg-config C:/Strawberry/perl/bin/pkg-config.bat
 cmake -DCMAKE_BUILD_TYPE=Release -G "Unix Makefiles" .
@@ -54,4 +56,7 @@ make -j4
 rm subconverter.exe
 # shellcheck disable=SC2046
 g++ $(find CMakeFiles/subconverter.dir/src -name "*.obj") curl/lib/libcurl.a -o base/subconverter.exe -static -lbcrypt -lpcre2-8 -l:quickjs/libquickjs.a -llibcron -lyaml-cpp -liphlpapi -lcrypt32 -lws2_32 -lwsock32 -lz -s
-mv base subconverter
+
+if [ "$SKIP_UPDATE" != "1" ]; then
+  mv base subconverter
+fi
