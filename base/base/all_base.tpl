@@ -130,7 +130,7 @@ tun:
   endpoint-independent-nat: true
   
   # [优化5] 调整 MTU，避免分包导致的速度损失 (通常 9000 或 1500，保守设 9000 由系统自适应)
-  mtu: 1400
+  mtu: 1280
 profile:
   # 存储你手动选择的节点，重启不丢失
   store-selected: true
